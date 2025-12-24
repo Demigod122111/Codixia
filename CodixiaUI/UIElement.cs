@@ -1,9 +1,14 @@
-﻿using System.Numerics;
+﻿using Raylib_cs;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Codixia.UI;
 
 public abstract class UIElement
 {
+    public static UIElement? FocusedElement => _focusedElement;
+    private static UIElement? _focusedElement;
+
     public Vector2 Position;
     public Vector2 Size;           // computed or fixed
     public Vector2 MinSize = Vector2.Zero; // minimum size
@@ -13,6 +18,7 @@ public abstract class UIElement
     public UIContainer? Parent;
     public bool AutoSize = false;
     public bool IsRoot = false;
+    public bool IsFocused => FocusedElement == this;
 
     public LayoutPosition LayoutPosition = LayoutPosition.Relative;
     public Alignment Align = Alignment.Start;
@@ -30,6 +36,9 @@ public abstract class UIElement
     {
         if (!Visible || !Enabled)
             return;
+
+        if (Raylib.IsMouseButtonPressed(MouseButton.Left) && IsMouseOver())
+            Focus();
     }
 
     /// <summary>
@@ -57,6 +66,42 @@ public abstract class UIElement
         Size.X = MathF.Max(Size.X, MinSize.X);
         Size.Y = MathF.Max(Size.Y, MinSize.Y);
     }
+
+    /// <summary>
+    /// Focus the specified UI element.
+    /// </summary>
+    /// <param name="element"></param>
+    /// <returns><see langword="true" /> if element was not focused before</returns>
+    public static bool Focus(UIElement element)
+    {
+        var res = _focusedElement != element;
+        _focusedElement = element;
+        return res;
+    }
+
+    /// <summary>
+    /// Focus this UI element.
+    /// </summary>
+    /// <returns><inheritdoc cref="Focus(UIElement)"/></returns>
+    public bool Focus() => Focus(this);
+
+    /// <summary>
+    /// Unfocus the specified UI element.
+    /// </summary>
+    /// <param name="element"></param>
+    /// <returns><see langword="true" /> if element was focused before</returns>
+    public static bool Unfocus(UIElement? element = null, bool onlyElement = false)
+    {
+        var res = element != null && _focusedElement == element;
+        if (!onlyElement || res) _focusedElement = null;
+        return res;
+    }
+
+    /// <summary>
+    /// Unfocus this UI element.
+    /// </summary>
+    /// <returns><inheritdoc cref="Unfocus(UIElement)"/></returns>
+    public bool Unfocus() => Unfocus(this, true);
 
     public bool IsMouseOver()
     {

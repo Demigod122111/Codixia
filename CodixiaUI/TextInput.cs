@@ -25,12 +25,16 @@ public class TextInput : UIElement
 
     public int BorderThickness = 2;
 
+    // Actions
+    public Action<string>? OnTextChanged { get; set; }
+    public Action? OnSubmit { get; set; }
+
     // State
-    private bool _isFocused = false;
     private bool _isHovered = false;
     private int _cursorPosition = 0;
     private float _cursorBlinkTimer = 0f;
     private const float CursorBlinkInterval = 0.5f;
+    private string _lastText = "";
 
     // Selection
     private int _selectionStart = -1;
@@ -45,6 +49,7 @@ public class TextInput : UIElement
     private const float KeyRepeatDelay = 0.5f;
     private const float KeyRepeatRate = 0.05f;
     private bool _keyInitialPress = false;
+
 
     public TextInput()
     {
@@ -69,26 +74,22 @@ public class TextInput : UIElement
         // Handle focus
         if (Raylib.IsMouseButtonPressed(MouseButton.Left))
         {
-            if (IsMouseOver())
+            if (!IsFocused && _isHovered)
             {
-                if (!_isFocused)
-                {
-                    _isFocused = true;
-                    _cursorBlinkTimer = 0f;
-                }
+                Focus();
+                _cursorBlinkTimer = 0f;
+                ClearSelection();
+            }
 
-                // Calculate cursor position from mouse click
-                UpdateCursorFromMouse();
-            }
-            else
-            {
-                _isFocused = false;
-                _selectionStart = -1;
-                _selectionEnd = -1;
-            }
+            UpdateCursorFromMouse();
+
+
+
+            if (IsFocused && !_isHovered) Unfocus();
         }
 
-        if (!_isFocused) return;
+
+        if (!IsFocused) return;
 
         // Handle text selection with shift + arrow keys or mouse drag
         if (Raylib.IsMouseButtonDown(MouseButton.Left) && IsMouseOver())
@@ -355,13 +356,24 @@ public class TextInput : UIElement
         return false;
     }
 
+    
     public override void Update()
     {
         base.Update();
 
+
+        var enter = Raylib.IsKeyPressed(KeyboardKey.Enter) || Raylib.IsKeyPressed(KeyboardKey.KpEnter);
+
+        if (IsFocused && (!Visible || !Enabled || Raylib.IsKeyPressed(KeyboardKey.Escape) || enter))
+        {
+            Unfocus();
+
+            if (enter) OnSubmit?.Invoke();
+        }
+
         if (!Visible) return;
 
-        if (_isFocused)
+        if (IsFocused)
         {
             _cursorBlinkTimer += Global.GetDeltaTime();
             if (_cursorBlinkTimer >= CursorBlinkInterval * 2)
@@ -372,6 +384,12 @@ public class TextInput : UIElement
 
         // Update text scroll offset to keep cursor visible
         UpdateTextScroll();
+
+        if (_lastText != Text)
+        {
+            _lastText = Text;
+            OnTextChanged?.Invoke(Text);
+        }
     }
 
     public override void Render()
@@ -380,8 +398,8 @@ public class TextInput : UIElement
 
         if (!Visible) return;
 
-        Color bgColor = _isFocused ? FocusedBackgroundColor : BackgroundColor;
-        Color borderCol = _isFocused ? FocusedBorderColor : BorderColor;
+        Color bgColor = IsFocused ? FocusedBackgroundColor : BackgroundColor;
+        Color borderCol = IsFocused ? FocusedBorderColor : BorderColor;
 
         // Draw background
         Raylib.DrawRectangle(
@@ -432,7 +450,7 @@ public class TextInput : UIElement
         );
 
         // Draw selection
-        if (_isFocused && HasSelection())
+        if (IsFocused && HasSelection())
         {
             DrawSelection(textPos);
         }
@@ -441,7 +459,7 @@ public class TextInput : UIElement
         Raylib.DrawTextEx(Font, displayText, textPos, FontSize, TextSpacing, displayColor);
 
         // Draw cursor
-        if (_isFocused && _cursorBlinkTimer < CursorBlinkInterval && !string.IsNullOrEmpty(displayText))
+        if (IsFocused && _cursorBlinkTimer < CursorBlinkInterval && !string.IsNullOrEmpty(displayText))
         {
             DrawCursor(textPos);
         }
@@ -497,7 +515,7 @@ public class TextInput : UIElement
 
     private void UpdateTextScroll()
     {
-        if (!_isFocused) return;
+        if (!IsFocused) return;
 
         string beforeCursor = Text.Substring(0, _cursorPosition);
         float cursorPosX = Raylib.MeasureTextEx(Font, beforeCursor, FontSize, TextSpacing).X;
@@ -526,6 +544,7 @@ public class TextInput : UIElement
 
     private void UpdateCursorFromMouse()
     {
+        if (!_isHovered) return;
         _cursorPosition = GetCursorPositionFromMouse();
         ClearSelection();
     }

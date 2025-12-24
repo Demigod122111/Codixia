@@ -237,6 +237,9 @@ public class UIContainer : UIElement
 
     private static bool mouseProcessed(UIElement element, HashSet<UIElement> alreadyInput)
     {
+        if (!element.Visible || !element.Enabled)
+            return false;
+
         // Input propagation: top-most first
         if (element is UIContainer container)
         {
@@ -248,30 +251,47 @@ public class UIContainer : UIElement
         }
         else
         {
-            if (element.MouseFilter == MouseFilter.Ignore || !element.Visible || !element.Enabled)
+            if (element.MouseFilter == MouseFilter.Ignore)
                 return false;
 
-            if (element.IsMouseOver())
-            {
-                element.Input();
-                alreadyInput.Add(element);
+            if (!element.IsMouseOver())
+                return false;
 
-                bool handled = element.HandleMouseInput();
+            // ALWAYS deliver input
+            element.Input();
 
-                if (handled && element.MouseFilter == MouseFilter.Stop)
-                {
-                    return true; // Stop propagation
-                }
-            }
+            bool handled = element.HandleMouseInput();
+
+            // Only stop traversal if Stop + handled
+            return handled && element.MouseFilter == MouseFilter.Stop;
         }
 
         return false;
     }
 
+    private static void callInput(UIElement element, HashSet<UIElement> alreadyInput)
+    {
+        if (!element.Visible || !element.Enabled || alreadyInput.Contains(element))
+            return;
+
+        // Input propagation: top-most first
+        if (element is UIContainer container)
+        {
+            for (int i = container.Children.Count - 1; i >= 0; i--)
+            {
+                callInput(container.Children[i], alreadyInput);
+            }
+
+            return;
+        }
+
+        element.Input();
+    }
+
     public override void Input()
     {
         base.Input();
-        if (!Visible || !Enabled)
+        if (!Visible || !Enabled || !IsRoot)
             return;
 
         HashSet<UIElement> alreadyInput = new();
@@ -279,11 +299,7 @@ public class UIContainer : UIElement
         if (mouseProcessed(this, alreadyInput))
             return;
 
-        foreach (var child in Children)
-        {
-            if (alreadyInput.Contains(child)) continue;
-            if (child.Visible && child.Enabled && child is not UIContainer) child.Input();
-        }
+        callInput(this, alreadyInput);
     }
 
     public override void Render()
